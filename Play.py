@@ -3,7 +3,7 @@ import numpy as np
 from TicTacToeState import TicTacToeState
 from AI import AI
 
-def display_board(curentState):
+def display_board(currentState):
     board = '-'*(2*currentState.sideLength + 1) + '\n'
     for row in currentState.grid:
         board += '|'
@@ -18,11 +18,6 @@ def display_board(curentState):
         board += '\n' + '-'*(2*currentState.sideLength + 1) + '\n'
     print(board)
 
-def make_move(currentState, y, x):
-    grid = currentState.grid
-    grid[y,x] = currentState.sideToMove
-    return TicTacToeState(grid, currentState.sideLength, currentState.sideToMove * -1)
-
 def is_valid_move(currentState, y, x):
     if 0 <= x < currentState.sideLength and 0 <= y < currentState.sideLength and currentState.grid[y][x] == 0:
         return True
@@ -30,7 +25,7 @@ def is_valid_move(currentState, y, x):
 
 def gen_start_state(sideLength):
     grid = np.zeros((sideLength, sideLength), dtype=int)
-    return TicTacToeState(grid, sideLength, 1)
+    return TicTacToeState(grid, sideLength, 1, sideLength * sideLength)
 
 print("Lets play tic-tac-toe.")
 variant = "0"
@@ -56,7 +51,7 @@ print("Human Plays X, Computer Plays O. Lets begin:")
 
 currentState = gen_start_state(variant)
 ai = AI(aiType, utility, ordering)
-# 1 is X -1 is O
+# 1 is X, -1 is O
 while ai.game_result(currentState) == None:
     display_board(currentState)
     y,x = -1, -1
@@ -66,8 +61,10 @@ while ai.game_result(currentState) == None:
             x = int(input("Enter the x coordinate of your move: "))
             y = int(input("Enter the y coordinate of your move: "))
     else:
+        print('Computer is thinking.')
         y,x = ai.move(currentState)
-    currentState = make_move(currentState, y, x)
+        print("Computer plays at: " + str(x) + ", " + str(y))
+    currentState = ai.make_move(currentState, y, x)
 display_board(currentState)
 winner = ai.game_result(currentState)
 if winner == 1:
