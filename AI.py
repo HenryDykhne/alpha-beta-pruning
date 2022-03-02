@@ -1,13 +1,14 @@
 import scipy.signal
 import numpy as np
+import random
 import time
 import copy
 from random import randrange
 from TicTacToeState import TicTacToeState
 from func_timeout import func_timeout, FunctionTimedOut
-from WinConditions import win3, win4, win5
+from WinConditions import win3, win4, win5, central3, central4, central5
 class AI:
-
+    
     def game_result(self, currentState):
         if currentState.sideLength == 3:
             win = win3
@@ -28,23 +29,60 @@ class AI:
             return 0
         return None
 
-    def weak_utility(self, boardState):
-        if self.game_result(boardState) == 1:
-            return float('inf')
-        if self.game_result(boardState) == -1:
-            return float('-inf')
-        if self.game_result(boardState) == 0:
+    def central_squares(self, boardState):
+        if boardState.sideLength == 3:
+            center = central3
+        elif boardState.sideLength == 4:
+            center = central4
+        elif boardState.sideLength == 5:
+            center = central5
+        else:
             return 0
+        tot = 0
+        for i, ring in enumerate(center):
+            res = scipy.signal.convolve2d(boardState.grid, ring, mode='valid', boundary='fill', fillvalue=0)
+            tot += (boardState.sideLength - i - 2) * res[0][0]
+        return tot
+
+    def winning_structures(self, boardState):
         return 0
+
+    def weak_utility(self, boardState):
+        res = self.game_result(boardState)
+        if res == 1:
+            return self.winVal
+        if res == -1:
+            return -self.winVal
+        if res == 0:
+            return 0
+        return ((boardState.sideLength - 2) * boardState.sideToMove) + (1 * self.central_squares(boardState))
 
     def strong_utility(self, boardState):
-        return 0
+        res = self.game_result(boardState)
+        if res == 1:
+            return self.winVal
+        if res == -1:
+            return -self.winVal
+        if res == 0:
+            return 0
+        return ((boardState.sideLength - 2) * boardState.sideToMove) + (1 * self.central_squares(boardState)) + (5 * self.winning_structures(boardState))
 
-    def random_ordering(self, boardState):
-        return 0
+    def random_ordering(self, boardState, moveList):
+        random.shuffle(moveList)
 
-    def lower_depth_eval_ordering(self, boardState):
-        return 0
+    def get_sort_val(self, boardState, move):
+        newState = self.make_move(boardState, move[0], move[1])
+        if newState.hashValue in self.transpositionTable:
+            return self.transpositionTable[newState.hashValue]
+        else:
+            return 0
+
+    def lower_depth_eval_ordering(self, boardState, moveList):
+        if boardState.sideToMove == 1:
+            rev = True
+        else:
+            rev = False
+        moveList.sort(key=lambda move: self.get_sort_val(boardState, move), reverse=rev)
 
     def random_move(self, boardState):
         result = np.where(boardState.grid == 0)
@@ -61,6 +99,7 @@ class AI:
         return list(zip(result[0],result[1]))
 
     def minimax(self, boardState, depth):
+        self.numNodesExplored += 1
         if depth == 0 or self.game_result(boardState) != None:
             if boardState.hashValue in self.transpositionTable:
                 val = self.transpositionTable[boardState.hashValue]
@@ -75,7 +114,7 @@ class AI:
             for move in moves:
                 newState = self.make_move(boardState, move[0], move[1])
                 tempVal, ty, tx = self.minimax(newState, depth - 1)
-                if tempVal >= val:
+                if tempVal > val:
                     val = tempVal
                     y = move[0]
                     x = move[1]
@@ -85,43 +124,90 @@ class AI:
             for move in moves:
                 newState = self.make_move(boardState, move[0], move[1])
                 tempVal, ty, tx = self.minimax(newState, depth - 1)
-                if tempVal <= val:
+                if tempVal < val:
                     val = tempVal
                     y = move[0]
                     x = move[1]
             return val, y, x
 
-    def minimax_shell(self, boardState):
+    def alpha_beta(self, boardState, depth, a, b):
+        self.numNodesExplored += 1
+        if depth == 0 or self.game_result(boardState) != None:
+            if boardState.hashValue in self.transpositionTable:
+                val = self.transpositionTable[boardState.hashValue]
+            else:
+                val = self.utility(boardState)
+                self.transpositionTable[boardState.hashValue] = val
+            return val, None, None
+        moves = self.generate_moves(boardState)
+        if depth == 1:
+            self.random_ordering(boardState, moves)
+        else:
+            self.ordering(boardState, moves)
+        y, x = 0, 0
+        if boardState.sideToMove == 1:
+            val = float('-inf')
+            for move in moves:
+                newState = self.make_move(boardState, move[0], move[1])
+                tempVal, ty, tx = self.alpha_beta(newState, depth - 1, a, b)
+                if tempVal > val:
+                    val = tempVal
+                    y = move[0]
+                    x = move[1]
+                if val >= b:
+                    break
+                a = max(a, val)
+            self.transpositionTable[boardState.hashValue] = val
+            return val, y, x
+        elif boardState.sideToMove == -1:
+            val = float('inf')
+            for move in moves:
+                newState = self.make_move(boardState, move[0], move[1])
+                tempVal, ty, tx = self.alpha_beta(newState, depth - 1, a, b)
+                if tempVal < val:
+                    val = tempVal
+                    y = move[0]
+                    x = move[1]
+                if val <= a:
+                    break
+                b = min(b, val)
+            self.transpositionTable[boardState.hashValue] = val
+            return val, y, x
+
+    def search_shell(self, boardState):
+        self.numNodesExplored = 0
         depth = 1
         timeStart = time.perf_counter()
         val, y, x = 0,0,0
         timeLeft = 60
+        limitExceeded = False
         while timeLeft > 0 and depth <= boardState.movesLeft:
             try:
-                val, y, x = func_timeout(timeLeft, self.minimax, args=(boardState, depth))
-                print("Depth: " + str(depth) + "Time Remaining: " + str(timeLeft))
+                print("Searching depth (plies): " + str(depth) + " | Time Remaining: " + f'{timeLeft:.2f}' + ' seconds')
+                if self.search == '2':
+                    val, y, x = func_timeout(timeLeft, self.minimax, args=(boardState, depth))
+                elif self.search == '3':
+                    val, y, x = func_timeout(timeLeft, self.alpha_beta, args=(boardState, depth, float('-inf'), float('inf')))
             except FunctionTimedOut:
-                pass
+                limitExceeded = True
             depth += 1
             timeLeft = 60 - (time.perf_counter() - timeStart)
-            if val == float('inf') or val == float('-inf'):
+            if val >= self.winVal or val <= -self.winVal:
                 break
+        if limitExceeded:
+            print('Time limit exceeded. Search depth (plies) completed: ' + str(depth - 2))
+        else:
+            print('Search depth (plies) completed: ' + str(depth - 1))
+        print('Nodes explored: ' + str(self.numNodesExplored) + ' | Wall clock time elapsed: ' + f'{(time.perf_counter() - timeStart):.2f}' + ' seconds')
+        print('Eval: ' + str(val))
         return y, x
 
-    def alpha_beta(self, boardState, depth):
-        return 0
-    def alpha_beta_shell(self, boardState):
-        return 0
-    
     def __init__(self, aiType, utility, ordering):
         if aiType == '1':
             self.move = self.random_move
-        elif aiType == '2':
-            self.move = self.minimax_shell
-        elif aiType  == '3':
-            self.move = self.alpha_beta_shell
         else:
-            self.move = None
+            self.move = self.search_shell
+            self.search = aiType
 
         if utility == '1':
             self.utility = self.weak_utility
@@ -132,10 +218,11 @@ class AI:
 
         if ordering == '1':
             self.ordering = self.random_ordering
-        elif utility == '2':
+        elif ordering == '2':
             self.ordering = self.lower_depth_eval_ordering
         else:
             self.ordering = None
         self.transpositionTable = {}
+        self.winVal = float('inf')
 
     

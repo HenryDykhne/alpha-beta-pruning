@@ -47,10 +47,10 @@ if aiType == "3":
     while ordering not in ["1", "2"]:
         ordering = input("Select Move Ordering Algorithm (Type 1 or 2):\n1) random\n2) order by lower depth eval\n")
 
-print("Human Plays X, Computer Plays O. Lets begin:")
 
 currentState = gen_start_state(variant)
 ai = AI(aiType, utility, ordering)
+print("Human Plays X, Computer Plays O. Lets begin:")
 # 1 is X, -1 is O
 while ai.game_result(currentState) == None:
     display_board(currentState)
@@ -58,8 +58,12 @@ while ai.game_result(currentState) == None:
     if currentState.sideToMove == 1:
         while not is_valid_move(currentState, y, x):
             print("Select a valid move. (x is left to right, y is top to bottom, top left starts at (0,0))")
-            x = int(input("Enter the x coordinate of your move: "))
-            y = int(input("Enter the y coordinate of your move: "))
+            try:
+                x = int(input("Enter the x coordinate of your move: "))
+                y = int(input("Enter the y coordinate of your move: "))
+            except ValueError:
+                x = -1
+                y = -1
     else:
         print('Computer is thinking.')
         y,x = ai.move(currentState)
