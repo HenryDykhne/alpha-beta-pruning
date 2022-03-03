@@ -45,27 +45,53 @@ class AI:
         return tot
 
     def winning_structures(self, boardState):
-        return 0
+        xGrid = copy.deepcopy(boardState.grid)
+        oGrid = copy.deepcopy(boardState.grid)
+        np.place(xGrid, xGrid == 1, [0])
+        np.place(oGrid, oGrid == -1, [0])
+        if boardState.sideLength == 3:
+            win = win3
+        elif boardState.sideLength == 4:
+            win = win4
+        elif boardState.sideLength == 5:
+            win = win5
+        else:
+            return None
+        tot = 0
+        for condition in win:
+            # we run a convolution to try and find winning possibilities
+            xRes = scipy.signal.convolve2d(xGrid, condition, mode='valid', boundary='fill', fillvalue=0)
+            oRes = scipy.signal.convolve2d(oGrid, condition, mode='valid', boundary='fill', fillvalue=0)
+            for iy, ix in np.ndindex(xRes.shape):
+                if xRes[iy, ix] != 0 and oRes[iy, ix] != 0:
+                    tot += 0
+                else:
+                    tot += xRes[iy, ix] + oRes[iy, ix]
+        return tot
 
     def weak_utility(self, boardState):
         res = self.game_result(boardState)
+        val = 0
         if res == 1:
-            return self.winVal
+            val += self.winVal
         if res == -1:
-            return -self.winVal
+            val += -self.winVal
         if res == 0:
             return 0
-        return ((boardState.sideLength - 2) * boardState.sideToMove) + (1 * self.central_squares(boardState))
+        val += (10 * boardState.sideToMove) + (20 * self.central_squares(boardState))
+        return val
 
     def strong_utility(self, boardState):
         res = self.game_result(boardState)
+        val = 0
         if res == 1:
-            return self.winVal
+            val += self.winVal
         if res == -1:
-            return -self.winVal
+            val += -self.winVal
         if res == 0:
             return 0
-        return ((boardState.sideLength - 2) * boardState.sideToMove) + (1 * self.central_squares(boardState)) + (5 * self.winning_structures(boardState))
+        val += (10 * boardState.sideToMove) + (30 * self.winning_structures(boardState))
+        return val
 
     def random_ordering(self, boardState, moveList):
         random.shuffle(moveList)
@@ -140,9 +166,7 @@ class AI:
                 self.transpositionTable[boardState.hashValue] = val
             return val, None, None
         moves = self.generate_moves(boardState)
-        if depth == 1:
-            self.random_ordering(boardState, moves)
-        else:
+        if depth != 1:
             self.ordering(boardState, moves)
         y, x = 0, 0
         if boardState.sideToMove == 1:
@@ -179,7 +203,8 @@ class AI:
         depth = 1
         timeStart = time.perf_counter()
         val, y, x = 0,0,0
-        timeLeft = 60
+        thinkTime = 60 ## MAX NUMBER OF SECONDS TO THINK FOR
+        timeLeft = thinkTime 
         limitExceeded = False
         while timeLeft > 0 and depth <= boardState.movesLeft:
             try:
@@ -191,8 +216,8 @@ class AI:
             except FunctionTimedOut:
                 limitExceeded = True
             depth += 1
-            timeLeft = 60 - (time.perf_counter() - timeStart)
-            if val >= self.winVal or val <= -self.winVal:
+            timeLeft = thinkTime - (time.perf_counter() - timeStart)
+            if val >= self.winVal - 10000 or val <= -self.winVal + 10000:
                 break
         if limitExceeded:
             print('Time limit exceeded. Search depth (plies) completed: ' + str(depth - 2))
@@ -223,6 +248,6 @@ class AI:
         else:
             self.ordering = None
         self.transpositionTable = {}
-        self.winVal = float('inf')
+        self.winVal = 10000000 #revert to float('inf') if this is causing problems
 
     
